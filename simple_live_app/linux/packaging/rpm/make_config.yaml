@@ -1,0 +1,20 @@
+display_name: Simple-Live
+package_name: simple-live
+icon: assets/logo.png
+summary: Simple Live APP
+group: Applications/Multimedia
+vendor: xiaoyaocz
+packager: xiaoyaocz
+packagerEmail: xiaoyaocz@52uwp.com
+license: GPL-3.0-only
+url: https://github.com/xiaoyaocz/dart_simple_live
+
+keywords:
+  - Simple Live
+
+generic_name: Simple-Live
+
+categories:
+  - Media
+
+startup_notify: true
