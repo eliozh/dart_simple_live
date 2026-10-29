@@ -1,0 +1,79 @@
+name: app-build-rpm
+#推送Tag时触发，也可手动为已有Tag补充RPM包
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the RPM to (e.g. v1.11.4)"
+        required: true
+        type: string
+jobs:
+  # 打包RPM（Ubuntu 24.04 链接 libmpv.so.2，与 Fedora 的 mpv-libs 一致）
+  build-rpm:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # 签出代码
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      # 设置Flutter环境
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+      # 安装依赖
+      - name: Update apt-get
+        run: sudo apt-get update
+      - name: Install Dependencies
+        run: sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev libmpv-dev mpv rpm patchelf
+      # 打开Linux Desktop支持
+      - name: Enable Flutter Desktop
+        run: flutter config --enable-linux-desktop
+      # 更新Flutter的packages
+      - name: Restore Packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+      # 设置flutter_distributor环境
+      - name: Install flutter_distributor
+        run: dart pub global activate flutter_distributor
+      # build Linux RPM
+      - name: Build RPM
+        run: |
+          cd simple_live_app
+          flutter_distributor package --platform linux --targets rpm --skip-clean
+      # 上传RPM至Artifacts
+      - name: Upload RPM to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-rpm
+          path: |
+            simple_live_app/build/dist/*/*.rpm
+
+      #获取版本信息（自动从 Git Tag 提取）
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
+
+      #上传至Release
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "${{ steps.version.outputs.VERSION }}"
+          tag_name: "${{ steps.version.outputs.VERSION }}"
+          target_commitish: master
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
+          token: ${{ secrets.TOKEN || github.token }}
+          files: |
+            simple_live_app/build/dist/*/*.rpm
+      #完成
+      - run: echo "🍏 RPM job's status is ${{ job.status }}."
