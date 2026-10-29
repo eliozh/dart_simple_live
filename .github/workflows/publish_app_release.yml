@@ -4,8 +4,36 @@ on:
   push:
     tags:
       - "v*"
+  #手动触发
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.2.3), created on master if it does not exist"
+        required: true
+        type: string
 jobs:
+  #手动触发时先在master上创建Tag
+  create-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Create tag
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ inputs.tag }}"; then
+            echo "Tag ${{ inputs.tag }} already exists"
+          else
+            git tag "${{ inputs.tag }}"
+            git push origin "${{ inputs.tag }}"
+          fi
+
   build-mac-ios-android:
+    needs: create-tag
+    if: ${{ !failure() && !cancelled() }}
     runs-on: macos-latest
     permissions:
       contents: write
@@ -119,7 +147,7 @@ jobs:
       #获取版本信息（自动从 Git Tag 提取）
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Echo version
         run: echo "${{ steps.version.outputs.VERSION }}"
 
@@ -128,9 +156,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: "${{ steps.version.outputs.VERSION }}"
+          tag_name: "${{ steps.version.outputs.VERSION }}"
+          target_commitish: master
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-          token: ${{ secrets.TOKEN }}
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
+          token: ${{ secrets.TOKEN || github.token }}
           files: |
             simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
             simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
@@ -143,6 +173,8 @@ jobs:
 
   # 打包Linux
   build-linux:
+    needs: create-tag
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -190,7 +222,7 @@ jobs:
       #获取版本信息（自动从 Git Tag 提取）
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Echo version
         run: echo "${{ steps.version.outputs.VERSION }}"
 
@@ -199,9 +231,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: "${{ steps.version.outputs.VERSION }}"
+          tag_name: "${{ steps.version.outputs.VERSION }}"
+          target_commitish: master
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-          token: ${{ secrets.TOKEN }}
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
+          token: ${{ secrets.TOKEN || github.token }}
           files: |
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
@@ -210,6 +244,8 @@ jobs:
 
   # 打包Windows
   build-windows:
+    needs: create-tag
+    if: ${{ !failure() && !cancelled() }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -252,7 +288,7 @@ jobs:
       - name: Get version from tag
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${{ inputs.tag || github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Echo version
         run: echo "${{ steps.version.outputs.VERSION }}"
 
@@ -261,9 +297,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: "${{ steps.version.outputs.VERSION }}"
+          tag_name: "${{ steps.version.outputs.VERSION }}"
+          target_commitish: master
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-          token: ${{ secrets.TOKEN }}
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
+          token: ${{ secrets.TOKEN || github.token }}
           files: |
             simple_live_app/build/dist/*/*.msix
             simple_live_app/build/dist/*/*.zip
